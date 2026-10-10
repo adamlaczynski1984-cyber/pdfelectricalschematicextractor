@@ -1,1 +1,129 @@
-# PDF Electrical Schematic Extractor - Windows Installer\n# Run as Administrator\n\n$ErrorActionPreference = \"Stop\"\n\nWrite-Host \"===================================================\" -ForegroundColor Cyan\nWrite-Host \"PDF Electrical Schematic Extractor - Instalator\" -ForegroundColor Cyan\nWrite-Host \"===================================================\" -ForegroundColor Cyan\nWrite-Host \"\"\n\n# Check if running as Administrator\n$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)\nif (-not $isAdmin) {\n    Write-Host \"BLAD: Uruchom instalator jako Administrator!\" -ForegroundColor Red\n    Read-Host \"Nacisnij Enter aby zakonczyc\"\n    exit 1\n}\n\nWrite-Host \"[1/5] Sprawdzanie wymaganych komponentow...\" -ForegroundColor Yellow\n\n# Check Python\n$pythonExists = $null -ne (Get-Command python -ErrorAction SilentlyContinue)\nif (-not $pythonExists) {\n    Write-Host \"BLAD: Python nie jest zainstalowany!\" -ForegroundColor Red\n    Write-Host \"Pobierz Python z: https://www.python.org/downloads/\" -ForegroundColor Yellow\n    Read-Host \"Nacisnij Enter aby zakonczyc\"\n    exit 1\n}\n\nWrite-Host \"✓ Python znaleziony\" -ForegroundColor Green\n\n# Check Git (optional but helpful)\n$gitExists = $null -ne (Get-Command git -ErrorAction SilentlyContinue)\nif (-not $gitExists) {\n    Write-Host \"! Git nie znaleziony (opcjonalnie)\" -ForegroundColor Yellow\n}\nelse {\n    Write-Host \"✓ Git znaleziony\" -ForegroundColor Green\n}\n\n# Define installation paths\n$installPath = \"C:\\Program Files\\PDFElectricalSchematicExtractor\"\n$scriptPath = \"$PSScriptRoot\"\n$pythonVenvPath = \"$installPath\\venv\"\n$startMenuPath = \"$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\"\n$desktopPath = \"$env:USERPROFILE\\Desktop\"\n\nWrite-Host \"\"\nWrite-Host \"[2/5] Przygotowanie katalogu instalacyjnego...\" -ForegroundColor Yellow\n\n# Create installation directory\nif (-not (Test-Path $installPath)) {\n    New-Item -ItemType Directory -Path $installPath -Force | Out-Null\n    Write-Host \"✓ Katalog utworzony: $installPath\" -ForegroundColor Green\n}\nelse {\n    Write-Host \"✓ Katalog istnieje: $installPath\" -ForegroundColor Green\n}\n\nWrite-Host \"\"\nWrite-Host \"[3/5] Kopiowanie plikow aplikacji...\" -ForegroundColor Yellow\n\n# Copy application files\nif (Test-Path \"$scriptPath\\app.py\") {\n    Copy-Item -Path \"$scriptPath\\*\" -Destination $installPath -Recurse -Force -Exclude @('installer.ps1', 'venv', '.git', '__pycache__', '*.pyc')\n    Write-Host \"✓ Pliki skopiowane\" -ForegroundColor Green\n}\nelse {\n    Write-Host \"BLAD: Pliki aplikacji nie znalezione w: $scriptPath\" -ForegroundColor Red\n    Read-Host \"Nacisnij Enter aby zakonczyc\"\n    exit 1\n}\n\nWrite-Host \"\"\nWrite-Host \"[4/5] Tworzenie srodowiska Python (venv)...\" -ForegroundColor Yellow\n\n# Create virtual environment\ncd $installPath\npython -m venv venv\nif ($LASTEXITCODE -ne 0) {\n    Write-Host \"BLAD: Nie udalo sie utworzyc wirtualnego srodowiska\" -ForegroundColor Red\n    Read-Host \"Nacisnij Enter aby zakonczyc\"\n    exit 1\n}\nWrite-Host \"✓ Srodowisko Python utworzone\" -ForegroundColor Green\n\nWrite-Host \"\"\nWrite-Host \"[5/5] Instalacja bibliotek Python...\" -ForegroundColor Yellow\n\n# Activate venv and install dependencies\n$activateScript = \"$pythonVenvPath\\Scripts\\Activate.ps1\"\n& $activateScript\n\n# Upgrade pip\npython -m pip install --upgrade pip --quiet\n\n# Install requirements\nif (Test-Path \"$installPath\\requirements.txt\") {\n    pip install -r \"$installPath\\requirements.txt\" --quiet\n    if ($LASTEXITCODE -ne 0) {\n        Write-Host \"BLAD: Nie udalo sie zainstalowac bibliotek\" -ForegroundColor Red\n        Read-Host \"Nacisnij Enter aby zakonczyc\"\n        exit 1\n    }\n    Write-Host \"✓ Biblioteki zainstalowane\" -ForegroundColor Green\n}\n\nWrite-Host \"\"\nWrite-Host \"[BONUS] Tworzenie skrotow...\" -ForegroundColor Yellow\n\n# Create batch script to run app\n$batchScript = @\"\n@echo off\ncd /d \"$installPath\"\nvenv\\Scripts\\python.exe app.py\npause\n\"@\n\n$batchPath = \"$installPath\\run.bat\"\nSet-Content -Path $batchPath -Value $batchScript -Encoding ASCII\nWrite-Host \"✓ Skrypt uruchomieniowy utworzony\" -ForegroundColor Green\n\n# Create desktop shortcut\n$shortcutPath = \"$desktopPath\\PDF Electrical Schematic Extractor.lnk\"\n$WshShell = New-Object -ComObject WScript.Shell\n$shortcut = $WshShell.CreateShortcut($shortcutPath)\n$shortcut.TargetPath = \"$batchPath\"\n$shortcut.WorkingDirectory = $installPath\n$shortcut.Description = \"PDF Electrical Schematic Extractor\"\n$shortcut.IconLocation = \"$installPath\\app.ico,0\"\n$shortcut.Save()\nWrite-Host \"✓ Skrot na pulpicie utworzony\" -ForegroundColor Green\n\n# Create Start Menu shortcut\n$startMenuShortcutPath = \"$startMenuPath\\PDF Electrical Schematic Extractor.lnk\"\n$startMenuShortcut = $WshShell.CreateShortcut($startMenuShortcutPath)\n$startMenuShortcut.TargetPath = \"$batchPath\"\n$startMenuShortcut.WorkingDirectory = $installPath\n$startMenuShortcut.Description = \"PDF Electrical Schematic Extractor\"\n$startMenuShortcut.IconLocation = \"$installPath\\app.ico,0\"\n$startMenuShortcut.Save()\nWrite-Host \"✓ Skrot w Menu Start utworzony\" -ForegroundColor Green\n\nWrite-Host \"\"\nWrite-Host \"===================================================\" -ForegroundColor Green\nWrite-Host \"INSTALACJA ZAKONCZYLA SIE POMYSLNIE!\" -ForegroundColor Green\nWrite-Host \"===================================================\" -ForegroundColor Green\nWrite-Host \"\"\nWrite-Host \"Aplikacja jest dostepna na pulpicie:\" -ForegroundColor Cyan\nWrite-Host \"  'PDF Electrical Schematic Extractor'\" -ForegroundColor Cyan\nWrite-Host \"\"\nWrite-Host \"Lub mozesz uruchomic ja z Menu Start\" -ForegroundColor Cyan\nWrite-Host \"\"\nWrite-Host \"Po uruchomieniu aplikacji otwiera sie przegladarka na:\" -ForegroundColor Yellow\nWrite-Host \"  http://localhost:5000\" -ForegroundColor Yellow\nWrite-Host \"\"\nRead-Host \"Nacisnij Enter aby zakonczyc\"\n"
+# PDF Electrical Schematic Extractor - Windows Installer
+# Run as Administrator
+
+$ErrorActionPreference = "Stop"
+
+Write-Host "===================================================" -ForegroundColor Cyan
+Write-Host "PDF Electrical Schematic Extractor - Instalator" -ForegroundColor Cyan
+Write-Host "===================================================" -ForegroundColor Cyan
+Write-Host ""
+
+$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    Write-Host "BLAD: Uruchom instalator jako Administrator!" -ForegroundColor Red
+    Read-Host "Nacisnij Enter aby zakonczyc"
+    exit 1
+}
+
+$installPath = "C:\Program Files\PDFElectricalSchematicExtractor"
+$desktopPath = [Environment]::GetFolderPath("Desktop")
+$startMenuPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
+$scriptPath = $PSScriptRoot
+
+Write-Host "[1/6] Sprawdzanie Python..." -ForegroundColor Yellow
+$pythonCmd = Get-Command python -ErrorAction SilentlyContinue
+if (-not $pythonCmd) {
+    Write-Host "Python nie jest zainstalowany. Pobieram i instaluje..." -ForegroundColor Yellow
+    $pythonInstaller = "$env:TEMP\python-installer.exe"
+    $downloadUrl = "https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe"
+    Invoke-WebRequest -Uri $downloadUrl -OutFile $pythonInstaller
+    Start-Process $pythonInstaller -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
+    $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $pythonCmd) {
+        Write-Host "BLAD: Python nie zostal poprawnie zainstalowany." -ForegroundColor Red
+        Read-Host "Nacisnij Enter aby zakonczyc"
+        exit 1
+    }
+}
+Write-Host "✓ Python OK" -ForegroundColor Green
+
+Write-Host "[2/6] Przygotowanie katalogu instalacji..." -ForegroundColor Yellow
+if (-not (Test-Path $installPath)) {
+    New-Item -ItemType Directory -Path $installPath -Force | Out-Null
+}
+Write-Host "✓ Katalog: $installPath" -ForegroundColor Green
+
+Write-Host "[3/6] Kopiowanie plikow aplikacji..." -ForegroundColor Yellow
+Copy-Item -Path "$scriptPath\*" -Destination $installPath -Recurse -Force -Exclude @("installer.ps1", "venv", "__pycache__", "*.pyc", ".git", ".github")
+Write-Host "✓ Pliki skopiowane" -ForegroundColor Green
+
+Write-Host "[4/6] Tworzenie srodowiska venv..." -ForegroundColor Yellow
+cd $installPath
+python -m venv venv
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "BLAD: Nie udalo sie utworzyc venv" -ForegroundColor Red
+    exit 1
+}
+Write-Host "✓ venv utworzone" -ForegroundColor Green
+
+Write-Host "[5/6] Instalacja bibliotek Python..." -ForegroundColor Yellow
+& "$installPath\venv\Scripts\Activate.ps1"
+python -m pip install --upgrade pip --quiet
+pip install -r "$installPath\requirements.txt" --quiet
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "BLAD: Nie udalo sie zainstalowac bibliotek Python." -ForegroundColor Red
+    Read-Host "Nacisnij Enter aby zakonczyc"
+    exit 1
+}
+Write-Host "✓ Biblioteki zainstalowane" -ForegroundColor Green
+
+Write-Host "[6/6] Instalacja Tesseract / Poppler..." -ForegroundColor Yellow
+$ts = Get-Command tesseract -ErrorAction SilentlyContinue
+if (-not $ts) {
+    Write-Host "Tesseract nie znaleziony. Probuje zainstalowac za pomoca winget..." -ForegroundColor Yellow
+    try {
+        winget install --id UB-Mannheim.TesseractOCR -e --accept-source-agreements --accept-package-agreements
+    }
+    catch {
+        Write-Host "! winget nie dostepny lub instalacja Tesseract nie powiodla sie." -ForegroundColor Yellow
+        Write-Host "Zaloguj sie do: https://github.com/UB-Mannheim/tesseract/wiki" -ForegroundColor Yellow
+    }
+}
+
+$pdftoppm = Get-Command pdftoppm -ErrorAction SilentlyContinue
+if (-not $pdftoppm) {
+    Write-Host "Poppler nie znaleziony. Probuje zainstalowac za pomoca winget..." -ForegroundColor Yellow
+    try {
+        winget install --id oschwartz10612.poppler-windows -e --accept-source-agreements --accept-package-agreements
+    }
+    catch {
+        Write-Host "! winget nie dostepny lub instalacja Poppler nie powiodla sie." -ForegroundColor Yellow
+        Write-Host "Zaloguj sie do: https://github.com/oschwartz10612/poppler-windows/releases" -ForegroundColor Yellow
+    }
+}
+
+Write-Host "Generowanie ikony aplikacji..." -ForegroundColor Yellow
+python "$installPath\create_icon.py"
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "! Nie utworzono ikony, ale aplikacja moze nadal dzialac." -ForegroundColor Yellow
+}
+
+# Create desktop shortcut
+$shortcutPath = "$desktopPath\PDF Electrical Schematic Extractor.lnk"
+$WshShell = New-Object -ComObject WScript.Shell
+$shortcut = $WshShell.CreateShortcut($shortcutPath)
+$shortcut.TargetPath = "$installPath\run.bat"
+$shortcut.WorkingDirectory = $installPath
+$shortcut.Description = "PDF Electrical Schematic Extractor"
+$shortcut.IconLocation = "$installPath\app.ico,0"
+$shortcut.Save()
+
+# Start Menu shortcut
+$startMenuShortcutPath = "$startMenuPath\PDF Electrical Schematic Extractor.lnk"
+$startMenuShortcut = $WshShell.CreateShortcut($startMenuShortcutPath)
+$startMenuShortcut.TargetPath = "$installPath\run.bat"
+$startMenuShortcut.WorkingDirectory = $installPath
+$startMenuShortcut.Description = "PDF Electrical Schematic Extractor"
+$startMenuShortcut.IconLocation = "$installPath\app.ico,0"
+$startMenuShortcut.Save()
+
+Write-Host "\n===================================================" -ForegroundColor Green
+Write-Host "INSTALACJA ZAKONCZONA" -ForegroundColor Green
+Write-Host "===================================================" -ForegroundColor Green
+Write-Host ""
+Write-Host "Aplikacja jest dostepna na pulpicie: PDF Electrical Schematic Extractor" -ForegroundColor Cyan
+Write-Host "Uwazaj: jesli Tesseract lub Poppler nie zostaly poprawnie zainstalowane, uruchom je ponownie z oficjalnych instalatorow." -ForegroundColor Yellow
+Write-Host ""
+Write-Host "Aplikacja uruchomi sie na: http://localhost:5000" -ForegroundColor Yellow
+Write-Host ""
+Read-Host "Nacisnij Enter aby zakonczyc"
